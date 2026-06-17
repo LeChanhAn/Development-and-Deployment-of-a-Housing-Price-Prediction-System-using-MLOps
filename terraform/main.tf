@@ -5,9 +5,7 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
-# ========================================================
-# 2. ECR REGISTRY (GIỮ LẠI ĐỂ KHÔNG PHẢI BUILD LẠI DOCKER)
-# ========================================================
+# 1. ECR REGISTRY 
 module "ecr" {
   source = "./modules/ecr"
 
@@ -19,11 +17,8 @@ module "ecr" {
   allow_pull_principals = [data.aws_caller_identity.current.arn]
 }
 
-# ========================================================
-# ẨN (COMMENT) TOÀN BỘ PHẦN DƯỚI ĐÂY ĐỂ TRÁNH TỐN PHÍ
-# ========================================================
-/*
-# 1. NETWORK (VPC & Subnets)
+
+# 2. NETWORK (VPC & Subnets)
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.5.0"
@@ -153,12 +148,81 @@ module "ecs" {
   ui_image  = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/housing-ui:latest"
 
   s3_bucket_name = "housing-regression-data-mlops-khaipd18"
-  alb_dns_name = aws_lb.main.dns_name
+  alb_dns_name   = aws_lb.main.dns_name
 }
 
-# Link URL 
-output "website_url" {
-  description = "Truy cập ứng dụng tại đường link này"
-  value       = "http://${aws_lb.main.dns_name}"
+# This module creates an IAM role that can be assumed by GitHub Actions using OIDC
+resource "aws_iam_openid_connect_provider" "github_core" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
-*/
+
+# 5. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
+# The policy document for CI/CD permissions (ECR + ECS)
+data "aws_iam_policy_document" "github_actions_permissions" {
+  # 1. Common permissions for Docker to login (Resource is required to be "*")
+  statement {
+    sid       = "GetAuthorizationToken"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  # 2. Pull and push permissions for the specified ECR repositories
+  statement {
+    sid    = "AllowPushPull"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload"
+    ]
+    resources = module.ecr.repository_arns
+  }
+
+  # 3. ECS Permissions to restart services
+  # Cấp quyền để chạy lệnh aws ecs update-service --force-new-deployment
+  statement {
+    sid    = "AllowECSUpdateService"
+    effect = "Allow"
+    actions = [
+      "ecs:UpdateService",
+      "ecs:DescribeServices"
+    ]
+
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "github_actions_cicd_policy" {
+  name        = "GitHubActions-CICD-Policy"
+  description = "Permissions for GitHub Actions to manage ECR images and deploy to ECS"
+  policy      = data.aws_iam_policy_document.github_actions_permissions.json
+}
+
+module "github_oidc_role" {
+  source              = "./modules/github-oidc-role"
+  role_name           = "github-actions-cicd-oidc-mlops-housing-project-role"
+  github_repo         = var.github_repo
+  oidc_provider_arn   = aws_iam_openid_connect_provider.github_core.arn
+  ecr_repository_arns = module.ecr.repository_arns
+  custom_policy_arns  = [aws_iam_policy.github_actions_cicd_policy.arn]
+}
+
+# 6. VPC ENDPOINTS 
+module "vpc_endpoints" {
+  source              = "./modules/vpc-endpoints"
+  region              = var.aws_region
+  vpc_id              = module.vpc.vpc_id
+  vpc_cidr            = var.vpc_cidr
+  private_subnet_list = module.vpc.private_subnets
+  route_table_list    = module.vpc.private_route_table_ids
+  depends_on          = [module.vpc]
+}
