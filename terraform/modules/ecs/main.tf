@@ -14,9 +14,9 @@ resource "aws_ecs_task_definition" "api" {
 
   container_definitions = jsonencode([
     {
-      name      = "housing-api"
-      image     = var.api_image
-      essential = true
+      name         = "housing-api"
+      image        = var.api_image
+      essential    = true
       portMappings = [{ containerPort = 8000 }]
       environment = [
         { name = "S3_BUCKET", value = var.s3_bucket_name },
@@ -30,7 +30,7 @@ resource "aws_ecs_service" "api_service" {
   name            = "housing-api-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 2 
+  desired_count   = 2
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -58,9 +58,9 @@ resource "aws_ecs_task_definition" "ui" {
 
   container_definitions = jsonencode([
     {
-      name      = "housing-ui"
-      image     = var.ui_image
-      essential = true
+      name         = "housing-ui"
+      image        = var.ui_image
+      essential    = true
       portMappings = [{ containerPort = 8501 }]
       environment = [
         { name = "S3_BUCKET", value = var.s3_bucket_name },
