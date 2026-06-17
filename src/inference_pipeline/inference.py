@@ -33,11 +33,13 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "predictions.csv"
 print("📂 Inference using project root:", PROJECT_ROOT)
 
 # Load training feature columns (strict schema from training dataset)
-if TRAIN_FE_PATH.exists():
-    _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
-    TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]  # excluding price column
-else:
-    TRAIN_FEATURE_COLUMNS = None
+# if TRAIN_FE_PATH.exists():
+#     _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
+#     TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]
+# else:
+#     TRAIN_FEATURE_COLUMNS = None
+
+TRAIN_FEATURE_COLUMNS = None
 
 
 # ----------------------------
@@ -49,6 +51,8 @@ def predict(
     freq_encoder_path: Path | str = DEFAULT_FREQ_ENCODER,
     target_encoder_path: Path | str = DEFAULT_TARGET_ENCODER,
 ) -> pd.DataFrame:
+    global TRAIN_FEATURE_COLUMNS
+    
     # Step 1: Preprocess raw input
     df = clean_and_merge(input_df)
     df = drop_duplicates(df)
@@ -81,6 +85,11 @@ def predict(
         df = df.drop(columns=["price"])
 
     # Step 5: Align columns with training schema
+    if TRAIN_FEATURE_COLUMNS is None and Path(TRAIN_FE_PATH).exists():
+        _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
+        TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]
+
+    # Sau khi cập nhật xong mới tiến hành reindex
     if TRAIN_FEATURE_COLUMNS is not None:
         df = df.reindex(columns=TRAIN_FEATURE_COLUMNS, fill_value=0)
 
