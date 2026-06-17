@@ -36,7 +36,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Build and push housing-api image
+      # Build and push housing-api image 
       - name: Build, Tag, and Push housing-api
         run: |
           IMAGE_TAG=${GITHUB_SHA}
