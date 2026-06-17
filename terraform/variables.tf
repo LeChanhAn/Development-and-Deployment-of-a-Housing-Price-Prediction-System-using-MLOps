@@ -16,5 +16,5 @@ variable "vpc_cidr" {
 variable "github_repo" {
   description = "The GitHub repository in the format 'owner/repo' that will be allowed to assume the role"
   type        = string
-  default     = "khaipd18/MLOps-Housing_Price"
+  default     = "LeChanhAn/Development-and-Deployment-of-a-Housing-Price-Prediction-System-using-MLOps"
 }
