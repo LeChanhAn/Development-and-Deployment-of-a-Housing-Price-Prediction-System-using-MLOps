@@ -34,7 +34,7 @@ variable "ui_image" {
 
 variable "s3_bucket_name" {
   type    = string
-  default = "housing-regression-data-mlops-khaipd18"
+  default = "housing-regression-data-mlops"
 }
 
 variable "alb_dns_name" {

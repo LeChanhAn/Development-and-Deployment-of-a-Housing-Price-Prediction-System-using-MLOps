@@ -101,6 +101,12 @@ resource "aws_lb_target_group" "ui_tg" {
     timeout             = 5
     interval            = 30
   }
+
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400 # Gắn session trong 1 ngày (tính bằng giây)
+    enabled         = true
+  }
 }
 
 # Listener: Nếu truy cập /predict thì vào API, còn lại vào Web
@@ -147,7 +153,7 @@ module "ecs" {
   api_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/housing-api:latest"
   ui_image  = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/housing-ui:latest"
 
-  s3_bucket_name = "housing-regression-data-mlops-khaipd18"
+  s3_bucket_name = "housing-regression-data-mlops"
   alb_dns_name   = aws_lb.main.dns_name
 }
 
