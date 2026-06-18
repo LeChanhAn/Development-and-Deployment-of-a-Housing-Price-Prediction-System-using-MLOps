@@ -1,0 +1,177 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'                  
+      - 'app.py'                  
+      - 'Dockerfile*'              
+      - 'pyproject.toml'          
+      - 'uv.lock'                 
+      - 'models/**'               
+      - '.github/workflows/ci.yml' 
+  pull_request: 
+    branches: [ main ]
+    paths:
+      - 'src/**'                  
+      - 'app.py'                  
+      - 'Dockerfile*'              
+      - 'pyproject.toml'          
+      - 'uv.lock'                 
+      - 'models/**'               
+      - '.github/workflows/ci.yml' 
+  workflow_dispatch: 
+  workflow_call:     
+
+jobs:
+  test-and-scan-code:
+    name: Unit Test & Code/Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      # 1. Unit Test (Sử dụng uv)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies & Run tests
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv venv
+          source .venv/bin/activate
+          uv pip install -r requirements.txt
+          uv pip install pytest pytest-cov
+          pytest tests/ --cov=src --cov-report=xml
+
+      # 2. SonarQube - Code Quality Scan
+      - name: SonarQube Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # 3. Snyk - Dependency Vulnerability Scan
+      - name: Snyk Dependency Scan
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  build-scan-and-push:
+    name: Build, Trivy Scan & Push Images
+    needs: test-and-scan-code
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::770353436964:role/github-actions-cicd-oidc-mlops-housing-project-role
+          aws-region: ap-southeast-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ---- API IMAGE ----
+      - name: Build housing-api
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: housing-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
+
+      - name: Run Trivy scanner on housing-api
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/housing-api:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1' # Đánh Fail pipeline nếu có lỗi CRITICAL/HIGH
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push housing-api to ECR
+        if: github.event_name != 'pull_request' # Không Push image nếu chỉ là PR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: housing-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # ---- UI IMAGE ----
+      - name: Build housing-ui
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: housing-ui
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile.streamlit .
+
+      - name: Run Trivy scanner on housing-ui
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/housing-ui:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push housing-ui to ECR
+        if: github.event_name != 'pull_request'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: housing-ui
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy:
+    name: Deploy to ECS
+    needs: build-scan-and-push
+    if: github.event_name != 'pull_request' # Chỉ Deploy khi push hoặc manual trigger
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::770353436964:role/github-actions-cicd-oidc-mlops-housing-project-role
+          aws-region: ap-southeast-1
+
+      - name: Deploy housing-api-service
+        run: |
+          aws ecs update-service \
+            --cluster housing-mlops-cluster \
+            --service housing-api-service \
+            --force-new-deployment
+
+      - name: Deploy housing-ui-service
+        run: |
+          aws ecs update-service \
+            --cluster housing-mlops-cluster \
+            --service housing-ui-service \
+            --force-new-deployment
