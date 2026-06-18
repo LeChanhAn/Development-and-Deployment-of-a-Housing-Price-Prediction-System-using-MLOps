@@ -47,7 +47,7 @@ jobs:
           source .venv/bin/activate
           uv pip install -r requirements.txt
           uv pip install pytest pytest-cov
-          pytest tests/ --cov=src --cov-report=xml
+          PYTHONPATH=. pytest tests/ --cov=src --cov-report=xml
 
       # 2. SonarQube - Code Quality Scan
       - name: SonarQube Scan
