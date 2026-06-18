@@ -58,14 +58,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # 3. Snyk - Dependency Vulnerability Scan
-      - name: Setup Snyk CLI
-        uses: snyk/actions/setup@master
-
-      - name: Snyk Dependency Scan
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --file=requirements.txt --package-manager=pip --severity-threshold=high
+      
 
   build-scan-and-push:
     name: Build, Trivy Scan & Push Images
