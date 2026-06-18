@@ -222,6 +222,43 @@ module "github_oidc_role" {
   custom_policy_arns  = [aws_iam_policy.github_actions_cicd_policy.arn]
 }
 
+data "aws_iam_policy_document" "terraform_state_permissions" {
+  statement {
+    sid     = "AllowS3StateManagement"
+    effect  = "Allow"
+    actions = ["s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = [
+      "arn:aws:s3:::dacn-project-tf-state",
+      "arn:aws:s3:::dacn-project-tf-state/*"
+    ]
+  }
+
+  statement {
+    sid       = "AllowDynamoDBLocking"
+    effect    = "Allow"
+    actions   = ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+    resources = ["arn:aws:dynamodb:ap-southeast-1:770353436964:table/dacn-terraform-state-lock"]
+  }
+}
+
+resource "aws_iam_policy" "terraform_state_policy" {
+  name        = "GitHubActions-Terraform-State-Policy"
+  description = "Permissions for GitHub Actions to manage Terraform state in S3 and DynamoDB"
+  policy      = data.aws_iam_policy_document.terraform_state_permissions.json
+}
+
+module "github_oidc_role_terraform" {
+  source              = "./modules/github-oidc-role"
+  role_name           = "github-actions-terraform-oidc-role"
+  github_repo         = var.github_repo
+  oidc_provider_arn   = aws_iam_openid_connect_provider.github_core.arn
+  ecr_repository_arns = []
+  custom_policy_arns = [
+    aws_iam_policy.terraform_state_policy.arn,
+    "arn:aws:iam::aws:policy/AdministratorAccess"
+  ]
+}
+
 # 6. VPC ENDPOINTS 
 module "vpc_endpoints" {
   source              = "./modules/vpc-endpoints"
