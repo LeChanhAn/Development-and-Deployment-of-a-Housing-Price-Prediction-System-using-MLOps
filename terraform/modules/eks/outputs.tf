@@ -49,3 +49,8 @@ output "node_group_sg_id" {
   description = "The security group ID associated with the EKS node group."
   value       = aws_security_group.eks_nodes_sg.id
 }
+
+output "oidc_provider_arn" {
+  description = "The ARN of the OIDC provider for the EKS cluster."
+  value       = aws_iam_openid_connect_provider.eks_oidc_provider.arn
+}
