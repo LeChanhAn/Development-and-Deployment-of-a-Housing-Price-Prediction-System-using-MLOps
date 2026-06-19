@@ -3,7 +3,7 @@
 # The `eks_vpc_configs` local variable contains the default VPC configuration for the EKS cluster, which includes subnet IDs from the VPC module and access settings for the cluster endpoint.
 locals {
   eks_vpc_configs = {
-    subnet_ids              = module.vpc.private_subnet_ids
+    subnet_ids              = module.vpc.private_subnets
     endpoint_private_access = true
     endpoint_public_access  = true
     public_access_cidrs     = []

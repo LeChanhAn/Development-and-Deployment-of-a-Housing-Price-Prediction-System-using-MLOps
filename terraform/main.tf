@@ -138,32 +138,14 @@ resource "aws_lb_listener_rule" "api_rule" {
   }
 }
 
-# 4. ECS FARGATE
-module "ecs" {
-  source = "./modules/ecs"
-
-  cluster_name    = "${var.project_name}-cluster"
-  vpc_id          = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnets
-
-  alb_security_group_id = aws_security_group.alb_sg.id
-  api_target_group_arn  = aws_lb_target_group.api_tg.arn
-  ui_target_group_arn   = aws_lb_target_group.ui_tg.arn
-
-  api_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repository_names[0]}:latest"
-  ui_image  = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repository_names[1]}:latest"
-
-  s3_bucket_name = "housing-regression-data-mlops"
-  alb_dns_name   = aws_lb.main.dns_name
-}
-
+# 4. EKS
 module "eks" {
   source       = "./modules/eks"
   cluster_name = var.eks_cluster_name
 
   k8s_version = var.eks_k8s_version
 
-  vpc_id = module.vpc.output_vpc_id
+  vpc_id = module.vpc.vpc_id
 
   vpc_config = local.eks_vpc_conf_finals
 
