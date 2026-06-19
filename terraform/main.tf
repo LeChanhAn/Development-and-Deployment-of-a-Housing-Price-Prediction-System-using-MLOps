@@ -9,10 +9,10 @@ data "aws_caller_identity" "current" {}
 module "ecr" {
   source = "./modules/ecr"
 
-  repository_names      = ["housing-api", "housing-ui"]
-  scan_on_push          = true
-  image_tag_mutability  = "MUTABLE"
-  force_delete          = true
+  repository_names      = var.ecr_repository_names
+  scan_on_push          = var.ecr_scan_on_push
+  image_tag_mutability  = var.ecr_image_tag_mutability
+  force_delete          = var.ecr_force_delete
   allow_push_principals = [data.aws_caller_identity.current.arn]
   allow_pull_principals = [data.aws_caller_identity.current.arn]
 }
@@ -31,7 +31,7 @@ module "vpc" {
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
 
   enable_nat_gateway     = true
-  single_nat_gateway     = false # Chạy nhiều NAT để đảm bảo HA
+  single_nat_gateway     = false
   one_nat_gateway_per_az = true
   enable_dns_hostnames   = true
   enable_dns_support     = true
@@ -150,13 +150,43 @@ module "ecs" {
   api_target_group_arn  = aws_lb_target_group.api_tg.arn
   ui_target_group_arn   = aws_lb_target_group.ui_tg.arn
 
-  api_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/housing-api:latest"
-  ui_image  = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/housing-ui:latest"
+  api_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repository_names[0]}:latest"
+  ui_image  = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repository_names[1]}:latest"
 
   s3_bucket_name = "housing-regression-data-mlops"
   alb_dns_name   = aws_lb.main.dns_name
 }
 
+module "eks" {
+  source       = "./modules/eks"
+  cluster_name = var.eks_cluster_name
+
+  k8s_version = var.eks_k8s_version
+
+  vpc_id = module.vpc.output_vpc_id
+
+  vpc_config = local.eks_vpc_conf_finals
+
+  capacity_type = var.eks_node_group_capacity_type
+
+  instance_type = var.eks_node_group_instance_type
+
+  ami_type = var.eks_node_group_ami_type
+
+  disk_size = var.eks_node_group_disk_size
+
+  node_scaling_config = var.eks_node_group_scaling_config
+
+  cni_version = var.eks_cni_version
+
+  coredns_version = var.eks_coredns_version
+
+  kube_proxy_version = var.eks_kube_proxy_version
+
+  depends_on = [module.vpc]
+}
+
+# 5. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
 # This module creates an IAM role that can be assumed by GitHub Actions using OIDC
 resource "aws_iam_openid_connect_provider" "github_core" {
   url = "https://token.actions.githubusercontent.com"
@@ -166,7 +196,6 @@ resource "aws_iam_openid_connect_provider" "github_core" {
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 
-# 5. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
 # The policy document for CI/CD permissions (ECR + ECS)
 data "aws_iam_policy_document" "github_actions_permissions" {
   # 1. Common permissions for Docker to login (Resource is required to be "*")
