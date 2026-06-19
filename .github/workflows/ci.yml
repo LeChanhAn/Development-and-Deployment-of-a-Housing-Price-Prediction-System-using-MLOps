@@ -13,16 +13,7 @@ on:
       - '.github/workflows/ci.yml' 
   pull_request: 
     branches: [ main ]
-    paths:
-      - 'src/**'                  
-      - 'app.py'                  
-      - 'Dockerfile*'              
-      - 'pyproject.toml'          
-      - 'uv.lock'                 
-      - 'models/**'               
-      - '.github/workflows/ci.yml' 
   workflow_dispatch: 
-  workflow_call:     
 
 jobs:
   test-and-scan-code:
@@ -34,7 +25,6 @@ jobs:
         with:
           fetch-depth: 0 
 
-      # 1. Unit Test (Sử dụng uv)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -51,14 +41,11 @@ jobs:
           cp tests/dummy_data/* data/processed/
           PYTHONPATH=. pytest tests/ --cov=src --cov-report=xml
 
-      # 2. SonarQube - Code Quality Scan
       - name: SonarQube Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      
 
   build-scan-and-push:
     name: Build, Trivy Scan & Push Images
@@ -96,21 +83,19 @@ jobs:
         with:
           image-ref: '${{ steps.login-ecr.outputs.registry }}/housing-api:${{ github.sha }}'
           format: 'table'
-          exit-code: '0' # Đánh Fail pipeline nếu có lỗi CRITICAL/HIGH
+          exit-code: '0' 
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
       - name: Push housing-api to ECR
-        if: github.event_name != 'pull_request' # Không Push image nếu chỉ là PR
+        if: github.event_name != 'pull_request'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: housing-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
       # ---- UI IMAGE ----
       - name: Build housing-ui
@@ -139,35 +124,40 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-  deploy:
-    name: Deploy to ECS
+  # AUTO UPDATE REPO GITOPS
+  update-gitops-repo:
+    name: Update Image Tags in GitOps Repo
     needs: build-scan-and-push
-    if: github.event_name != 'pull_request' # Chỉ Deploy khi push hoặc manual trigger
+    if: github.event_name != 'pull_request' # Chỉ chạy khi push code thật sự
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v4
         with:
-          role-to-assume: arn:aws:iam::770353436964:role/github-actions-cicd-oidc-mlops-housing-project-role
-          aws-region: ap-southeast-1
+          repository: 'khaipd18/Development-and-Deployment-of-a-Housing-Price-Prediction-System-using-MLOps-GitOps' 
+          token: ${{ secrets.GITOPS_PAT }} 
+          path: gitops-repo
 
-      - name: Deploy housing-api-service
+      - name: Update Image Tags via yq
         run: |
-          aws ecs update-service \
-            --cluster housing-mlops-cluster \
-            --service housing-api-service \
-            --force-new-deployment
+          cd gitops-repo
+          
+          # Dùng công cụ yq (có sẵn trên ubuntu-latest) để sửa tag trong file values-dev.yaml
+          yq -i '.image.tag = "${{ github.sha }}"' app/overlays/dev/api/values-dev.yaml
+          yq -i '.image.tag = "${{ github.sha }}"' app/overlays/dev/ui/values-dev.yaml
+          
+          # (Tùy chọn) Nếu bạn muốn push thẳng lên Prod thì thêm 2 dòng này
+          # yq -i '.image.tag = "${{ github.sha }}"' app/overlays/prod/api/values-prod.yaml
+          # yq -i '.image.tag = "${{ github.sha }}"' app/overlays/prod/ui/values-prod.yaml
 
-      - name: Deploy housing-ui-service
+      - name: Commit and Push changes
         run: |
-          aws ecs update-service \
-            --cluster housing-mlops-cluster \
-            --service housing-ui-service \
-            --force-new-deployment
+          cd gitops-repo
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          git add .
+          # Chỉ commit nếu có sự thay đổi
+          git diff --quiet && git diff --staged --quiet || git commit -m "ci: update image tags to ${{ github.sha }} [skip ci]"
+          git push origin main
