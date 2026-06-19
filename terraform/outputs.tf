@@ -18,3 +18,8 @@ output "eks_cluster_name" {
   description = "Tên của EKS Cluster"
   value       = module.eks.cluster_name
 }
+
+output "aws_lb_controller_role_arn" {
+  description = "ARN IAM balancer cho the AWS Load Balancer Controller trên EKS (IRSA)"
+  value       = module.aws_load_balancer_controller_irsa_role.iam_role_arn
+}
