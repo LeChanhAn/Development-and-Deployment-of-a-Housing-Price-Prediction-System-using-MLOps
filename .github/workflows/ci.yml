@@ -147,7 +147,7 @@ jobs:
           yq -i '.image.tag = "${{ github.sha }}"' app/overlays/dev/api/values-dev.yaml
           yq -i '.image.tag = "${{ github.sha }}"' app/overlays/dev/ui/values-dev.yaml
           
-          # (Tùy chọn) Nếu bạn muốn push thẳng lên Prod thì thêm 2 dòng này
+          # (Tùy chọn) Nếu muốn push thẳng lên Prod thì thêm 2 dòng này
           # yq -i '.image.tag = "${{ github.sha }}"' app/overlays/prod/api/values-prod.yaml
           # yq -i '.image.tag = "${{ github.sha }}"' app/overlays/prod/ui/values-prod.yaml
 
