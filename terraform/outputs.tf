@@ -14,6 +14,11 @@ output "github_oidc_terraform_role_arn" {
   value       = module.github_oidc_role_terraform.role_arn
 }
 
+output "ecr_repository_arns" {
+  description = "ARNs của các repository ECR được tạo ra"
+  value       = module.ecr.repository_arns
+}
+
 output "eks_cluster_name" {
   description = "Tên của EKS Cluster"
   value       = module.eks.cluster_name
