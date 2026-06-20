@@ -17,6 +17,8 @@ RUN uv sync --frozen --no-dev && rm -rf /tmp/.uv-cache
 # Copy project files
 COPY . .
 
+RUN chown -R 1000:1000 /app
+
 # Expose FastAPI default port
 EXPOSE 8000
 
