@@ -4,6 +4,8 @@ FROM python:3.11-slim
 # Set working directory inside container
 WORKDIR /app
 
+ENV UV_CACHE_DIR=/tmp/.uv-cache
+
 # Copy dependency files first (better caching)
 COPY pyproject.toml uv.lock* ./
 
