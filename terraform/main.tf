@@ -298,3 +298,22 @@ module "aws_load_balancer_controller_irsa_role" {
     }
   }
 }
+
+resource "aws_iam_role_policy" "lb_controller_extra_policy" {
+  name = "${var.project_name}-lb-controller-extra-policy"
+  role = module.aws_load_balancer_controller_irsa_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeRouteTables",
+          "elasticloadbalancing:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}

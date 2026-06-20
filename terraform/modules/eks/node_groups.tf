@@ -1,3 +1,22 @@
+resource "aws_launch_template" "eks_nodes_lt" {
+  name_prefix = "${var.cluster_name}-node-lt-"
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size = var.disk_size
+      volume_type = "gp3"
+    }
+  }
+}
+
 #eks node group configuration
 resource "aws_eks_node_group" "eks_node_group" {
   cluster_name    = aws_eks_cluster.eks_cluster.name
@@ -8,7 +27,6 @@ resource "aws_eks_node_group" "eks_node_group" {
   instance_types = var.instance_type
   ami_type       = var.ami_type
   capacity_type  = var.capacity_type
-  disk_size      = var.disk_size
 
   scaling_config {
     desired_size = var.node_scaling_config.desired_size
@@ -21,12 +39,16 @@ resource "aws_eks_node_group" "eks_node_group" {
   #version = aws_launch_template.eks_nodes_lt.latest_version
   #}
 
+  launch_template {
+    id      = aws_launch_template.eks_nodes_lt.id
+    version = aws_launch_template.eks_nodes_lt.latest_version
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.node_group_AmazonEKSWorkerNodePolicy,
     aws_iam_role_policy_attachment.node_group_AmazonEC2ContainerRegistryReadOnly,
   aws_iam_role_policy_attachment.node_group_AmazonSSMManagedInstanceCore]
 
-  #aws_launch_template.eks_nodes_lt]
 }
 
 resource "aws_security_group" "eks_nodes_sg" {
@@ -47,7 +69,7 @@ resource "aws_security_group" "eks_nodes_sg" {
     self      = true
   }
 }
-resource "aws_launch_template" "eks_nodes_lt" {
+/*resource "aws_launch_template" "eks_nodes_lt" {
   name_prefix = "${var.cluster_name}-nodes-lt"
 
   instance_type = var.instance_type[0]
@@ -60,4 +82,4 @@ resource "aws_launch_template" "eks_nodes_lt" {
   }
 
   vpc_security_group_ids = [aws_security_group.eks_nodes_sg.id]
-}
+}*/
