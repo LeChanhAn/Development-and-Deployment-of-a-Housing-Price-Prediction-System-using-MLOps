@@ -1,0 +1,72 @@
+name: Continuous Training (CT) Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  continuous-training:
+    name: Model Retraining & Artifacts Sync
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          version: "latest"
+          
+      - name: Install dependencies
+        run: uv sync
+        
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::770353436964:role/github-actions-ct-oidc-role
+          aws-region: ap-southeast-1
+          
+      - name: 0. Pull raw data from S3
+        run: |
+          mkdir -p data/raw/
+          aws s3 cp s3://housing-regression-data-mlops/raw/untouched_raw_original.csv data/raw/untouched_raw_original.csv
+
+
+      - name: 1. Run Data Pipeline (Load, Preprocess, Feature Engineering)
+        run: |
+          uv run python src/feature_pipeline/load.py
+          uv run python -m src.feature_pipeline.preprocess
+          uv run python -m src.feature_pipeline.feature_engineering
+          
+      - name: 2. Run Model Training & Hyperparameter Tuning
+        run: |
+          uv run python src/training_pipeline/train.py
+          uv run python src/training_pipeline/tune.py
+          
+      - name: 3. Evaluate Model
+        run: uv run python src/training_pipeline/eval.py
+          
+      - name: 4. Push updated Data Artifacts to AWS S3
+        run: |
+          # Đẩy các file dữ liệu đã xử lý lên folder processed/
+          aws s3 cp data/processed/feature_engineered_train.csv s3://housing-regression-data-mlops/processed/
+          aws s3 cp data/processed/feature_engineered_holdout.csv s3://housing-regression-data-mlops/processed/
+          aws s3 cp data/processed/cleaning_holdout.csv s3://housing-regression-data-mlops/processed/
+          
+      - name: 5. Push updated Models & Encoders to AWS S3
+        run: |
+          # Đẩy mô hình tốt nhất và các file mã hóa (encoders) lên folder models/
+          aws s3 cp models/xgb_best_model.pkl s3://housing-regression-data-mlops/models/
+          aws s3 cp models/freq_encoder.pkl s3://housing-regression-data-mlops/models/
+          aws s3 cp models/target_encoder.pkl s3://housing-regression-data-mlops/models/
