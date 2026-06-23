@@ -130,3 +130,9 @@ variable "eks_kube_proxy_version" {
   type        = string
   default     = "v1.35.3-eksbuild.2"
 }
+
+variable "s3_bucket_name" {
+  description = "The name of the S3 bucket to store MLOps Data and Models for Continuous Training."
+  type        = string
+  default     = "housing-regression-data-mlops"
+}

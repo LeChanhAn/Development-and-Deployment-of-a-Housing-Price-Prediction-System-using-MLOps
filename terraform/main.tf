@@ -1,11 +1,15 @@
+# ==========================================
 # DATA SOURCES (Lấy thông tin môi trường)
+# ==========================================
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
 data "aws_caller_identity" "current" {}
 
+# ==========================================
 # 1. ECR REGISTRY 
+# ==========================================
 module "ecr" {
   source = "./modules/ecr"
 
@@ -17,8 +21,9 @@ module "ecr" {
   allow_pull_principals = [data.aws_caller_identity.current.arn]
 }
 
-
+# ==========================================
 # 2. NETWORK (VPC & Subnets)
+# ==========================================
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.5.0"
@@ -37,7 +42,9 @@ module "vpc" {
   enable_dns_support     = true
 }
 
+# ==========================================
 # 3. APPLICATION LOAD BALANCER (ALB)
+# ==========================================
 # Tường lửa cho ALB: Internet
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
@@ -138,7 +145,9 @@ resource "aws_lb_listener_rule" "api_rule" {
   }
 }
 
+# ==========================================
 # 4. EKS
+# ==========================================
 module "eks" {
   source       = "./modules/eks"
   cluster_name = var.eks_cluster_name
@@ -168,7 +177,9 @@ module "eks" {
   depends_on = [module.vpc]
 }
 
+# ==========================================
 # 5. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
+# ==========================================
 # This module creates an IAM role that can be assumed by GitHub Actions using OIDC
 resource "aws_iam_openid_connect_provider" "github_core" {
   url = "https://token.actions.githubusercontent.com"
@@ -205,7 +216,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   # 3. ECS Permissions to restart services
-  # Cấp quyền để chạy lệnh aws ecs update-service --force-new-deployment
   statement {
     sid    = "AllowECSUpdateService"
     effect = "Allow"
@@ -213,7 +223,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ecs:UpdateService",
       "ecs:DescribeServices"
     ]
-
     resources = ["*"]
   }
 }
@@ -270,7 +279,45 @@ module "github_oidc_role_terraform" {
   ]
 }
 
-# 6. VPC ENDPOINTS 
+# ==========================================
+# 6. OIDC ROLE FOR CONTINUOUS TRAINING (CT)
+# ==========================================
+data "aws_iam_policy_document" "ct_s3_permissions" {
+  statement {
+    sid    = "AllowS3MLDataManagement"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+    # Tối ưu: Dùng tham chiếu động trực tiếp từ S3 bucket ở mục 9 để luôn chính xác 100%
+    resources = [
+      aws_s3_bucket.mlops_data.arn,
+      "${aws_s3_bucket.mlops_data.arn}/*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "ct_s3_policy" {
+  name        = "GitHubActions-CT-S3-Policy"
+  description = "Permissions for GitHub Actions to manage ML data and models in S3"
+  policy      = data.aws_iam_policy_document.ct_s3_permissions.json
+}
+
+module "github_oidc_role_ct" {
+  source              = "./modules/github-oidc-role"
+  role_name           = "github-actions-ct-oidc-role"
+  github_repo         = var.github_repo
+  oidc_provider_arn   = aws_iam_openid_connect_provider.github_core.arn
+  ecr_repository_arns = [] # CT không cần build docker image nên để trống
+  custom_policy_arns  = [aws_iam_policy.ct_s3_policy.arn]
+}
+
+# ==========================================
+# 7. VPC ENDPOINTS 
+# ==========================================
 module "vpc_endpoints" {
   source              = "./modules/vpc-endpoints"
   region              = var.aws_region
@@ -281,7 +328,9 @@ module "vpc_endpoints" {
   depends_on          = [module.vpc]
 }
 
-# 7. IAM ROLE FOR AWS LOAD BALANCER CONTROLLER (IRSA)
+# ==========================================
+# 8. IAM ROLE FOR AWS LOAD BALANCER CONTROLLER
+# ==========================================
 module "aws_load_balancer_controller_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "5.0.0"
@@ -292,8 +341,7 @@ module "aws_load_balancer_controller_irsa_role" {
 
   oidc_providers = {
     main = {
-      provider_arn = module.eks.oidc_provider_arn
-
+      provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["kube-system:aws-load-balancer-controller"]
     }
   }
@@ -316,4 +364,48 @@ resource "aws_iam_role_policy" "lb_controller_extra_policy" {
       }
     ]
   })
+}
+
+# ==========================================
+# 9. S3 BUCKET FOR MLOPS DATA & MODELS
+# ==========================================
+resource "aws_s3_bucket" "mlops_data" {
+  bucket = var.s3_bucket_name
+
+  force_destroy = true
+
+  tags = {
+    Name        = "MLOps Housing Regression Data"
+    Environment = "Production"
+    Project     = var.project_name
+  }
+}
+
+# 9.1 Versioning
+resource "aws_s3_bucket_versioning" "mlops_data_versioning" {
+  bucket = aws_s3_bucket.mlops_data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# 9.2 Security Best Practice
+resource "aws_s3_bucket_server_side_encryption_configuration" "mlops_data_encryption" {
+  bucket = aws_s3_bucket.mlops_data.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# 9.3 Public Access Block
+resource "aws_s3_bucket_public_access_block" "mlops_data_public_access" {
+  bucket = aws_s3_bucket.mlops_data.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
