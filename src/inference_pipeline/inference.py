@@ -70,10 +70,10 @@ def predict(
         df["zipcode_freq"] = df["zipcode"].map(freq_map).fillna(0)
         df = df.drop(columns=["zipcode"], errors="ignore")
 
-    # Target encoding (city_full → city_full_encoded)
+    # Target encoding (SỬA Ở ĐÂY: Đổi city_full_encoded thành city_encoded)
     if Path(target_encoder_path).exists() and "city_full" in df.columns:
         target_encoder = load(target_encoder_path)
-        df["city_full_encoded"] = target_encoder.transform(df["city_full"])
+        df["city_encoded"] = target_encoder.transform(df["city_full"])
         df = df.drop(columns=["city_full"], errors="ignore")
 
     # Drop leakage columns
@@ -85,20 +85,21 @@ def predict(
         y_true = df["price"].tolist()
         df = df.drop(columns=["price"])
 
-    # Step 5: Align columns with training schema
-    if expected_columns is not None:
-        # Nếu được truyền từ API, ưu tiên dùng
-        df = df.reindex(columns=expected_columns, fill_value=0)
-    else:
-        if TRAIN_FEATURE_COLUMNS is None and Path(TRAIN_FE_PATH).exists():
-            _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
-            TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]
-
-        if TRAIN_FEATURE_COLUMNS is not None:
-            df = df.reindex(columns=TRAIN_FEATURE_COLUMNS, fill_value=0)
-
-    # Step 6: Load model & predict
+    # Step 5 & 6 
     model = load(model_path)
+    
+    # Lấy danh sách cột gốc từ chính XGBoost model thay vì phụ thuộc vào file CSV
+    try:
+        model_cols = model.get_booster().feature_names
+        if model_cols:
+            # Reindex sẽ chèn các cột bị thiếu (lat, lng) và điền số 0
+            # Đồng thời bỏ đi các cột dư thừa nếu có
+            df = df.reindex(columns=model_cols, fill_value=0)
+    except AttributeError:
+        # Fallback nếu schema được truyền từ FastAPI
+        if expected_columns is not None:
+            df = df.reindex(columns=expected_columns, fill_value=0)
+
     preds = model.predict(df)
 
     # Step 7: Build output
