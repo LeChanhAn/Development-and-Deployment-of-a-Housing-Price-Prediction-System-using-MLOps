@@ -1,9 +1,3 @@
-# Link URL 
-output "website_url" {
-  description = "Truy cập ứng dụng tại đường link này"
-  value       = "http://${aws_lb.main.dns_name}"
-}
-
 output "ecr_repository_arns" {
   description = "ARNs của các repository ECR được tạo ra"
   value       = module.ecr.repository_arns

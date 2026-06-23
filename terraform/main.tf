@@ -43,110 +43,7 @@ module "vpc" {
 }
 
 # ==========================================
-# 3. APPLICATION LOAD BALANCER (ALB)
-# ==========================================
-# Tường lửa cho ALB: Internet
-resource "aws_security_group" "alb_sg" {
-  name        = "${var.project_name}-alb-sg"
-  description = "Allow HTTP inbound traffic"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Cho phép Load Balancer gọi vào trong các container ở mọi port
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# Khởi tạo Load Balancer nằm ở Public Subnets
-resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = module.vpc.public_subnets
-}
-
-# Đích đến 1: Nhóm các container API
-resource "aws_lb_target_group" "api_tg" {
-  name        = "${var.project_name}-api-tg"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-
-  health_check {
-    path                = "/docs"
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-  }
-}
-
-# Đích đến 2: Nhóm các container UI (Streamlit)
-resource "aws_lb_target_group" "ui_tg" {
-  name        = "${var.project_name}-ui-tg"
-  port        = 8501
-  protocol    = "HTTP"
-  vpc_id      = module.vpc.vpc_id
-  target_type = "ip"
-
-  health_check {
-    path                = "/_stcore/health" # Đường dẫn check sức khỏe chuẩn của Streamlit
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-  }
-
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400 # Gắn session trong 1 ngày (tính bằng giây)
-    enabled         = true
-  }
-}
-
-# Listener: Nếu truy cập /predict thì vào API, còn lại vào Web
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  # Mặc định: Đẩy vào Web Streamlit
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ui_tg.arn
-  }
-}
-
-resource "aws_lb_listener_rule" "api_rule" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api_tg.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/predict*", "/docs*", "/openapi.json"]
-    }
-  }
-}
-
-# ==========================================
-# 4. EKS
+# 3. EKS
 # ==========================================
 module "eks" {
   source       = "./modules/eks"
@@ -178,7 +75,7 @@ module "eks" {
 }
 
 # ==========================================
-# 5. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
+# 4. OIDC ROLE FOR GITHUB ACTIONS (CI/CD)
 # ==========================================
 # This module creates an IAM role that can be assumed by GitHub Actions using OIDC
 resource "aws_iam_openid_connect_provider" "github_core" {
@@ -280,7 +177,7 @@ module "github_oidc_role_terraform" {
 }
 
 # ==========================================
-# 6. OIDC ROLE FOR CONTINUOUS TRAINING (CT)
+# 5. OIDC ROLE FOR CONTINUOUS TRAINING (CT)
 # ==========================================
 data "aws_iam_policy_document" "ct_s3_permissions" {
   statement {
@@ -316,7 +213,7 @@ module "github_oidc_role_ct" {
 }
 
 # ==========================================
-# 7. VPC ENDPOINTS 
+# 6. VPC ENDPOINTS 
 # ==========================================
 module "vpc_endpoints" {
   source              = "./modules/vpc-endpoints"
@@ -329,7 +226,7 @@ module "vpc_endpoints" {
 }
 
 # ==========================================
-# 8. IAM ROLE FOR AWS LOAD BALANCER CONTROLLER
+# 7. IAM ROLE FOR AWS LOAD BALANCER CONTROLLER
 # ==========================================
 module "aws_load_balancer_controller_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
@@ -367,7 +264,7 @@ resource "aws_iam_role_policy" "lb_controller_extra_policy" {
 }
 
 # ==========================================
-# 9. S3 BUCKET FOR MLOPS DATA & MODELS
+# 8. S3 BUCKET FOR MLOPS DATA & MODELS
 # ==========================================
 resource "aws_s3_bucket" "mlops_data" {
   bucket = var.s3_bucket_name
@@ -381,7 +278,7 @@ resource "aws_s3_bucket" "mlops_data" {
   }
 }
 
-# 9.1 Versioning
+# 8.1 Versioning
 resource "aws_s3_bucket_versioning" "mlops_data_versioning" {
   bucket = aws_s3_bucket.mlops_data.id
   versioning_configuration {
@@ -389,7 +286,7 @@ resource "aws_s3_bucket_versioning" "mlops_data_versioning" {
   }
 }
 
-# 9.2 Security Best Practice
+# 8.2 Security Best Practice
 resource "aws_s3_bucket_server_side_encryption_configuration" "mlops_data_encryption" {
   bucket = aws_s3_bucket.mlops_data.id
 
@@ -400,7 +297,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "mlops_data_encryp
   }
 }
 
-# 9.3 Public Access Block
+# 8.3 Public Access Block
 resource "aws_s3_bucket_public_access_block" "mlops_data_public_access" {
   bucket = aws_s3_bucket.mlops_data.id
 
