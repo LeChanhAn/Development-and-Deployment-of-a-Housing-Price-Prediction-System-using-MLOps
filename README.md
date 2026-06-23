@@ -1,191 +1,263 @@
-## Housing ML end2end Project
+# Development and Deployment of a Housing Price Prediction System using MLOps
 
-## Project Overview
+## 👥 Thành viên nhóm
 
-Housing Regression MLE is an end-to-end machine learning pipeline for predicting housing prices using XGBoost. The project follows ML engineering best practices with modular pipelines, experiment tracking via MLflow, containerization, AWS cloud deployment, and comprehensive testing. The system includes both a REST API and a Streamlit dashboard for interactive predictions.
+| Họ và tên | MSSV |
+|-----------|------|
+| Lê Chánh Ân | 23520007 |
+| Phan Đình Khải | 23520678 |
 
-## Architecture
+---
 
-The codebase is organized into distinct pipelines following the flow:
-`Load → Preprocess → Feature Engineering → Train → Tune → Evaluate → Inference → Batch → Serve`
+## Giới thiệu
 
-### Core Modules
+Dự án xây dựng hệ thống Machine Learning end-to-end để dự đoán giá nhà, dùng mô hình **XGBoost**. Toàn bộ quy trình từ xử lý dữ liệu, huấn luyện, đến triển khai đều được tự động hóa theo hướng MLOps — bao gồm CI/CD, Continuous Training và GitOps trên AWS.
 
-- **`src/feature_pipeline/`**: Data loading, preprocessing, and feature engineering
-  - `load.py`: Time-aware data splitting (train <2020, eval 2020-21, holdout ≥2022)
-  - `preprocess.py`: City normalization, deduplication, outlier removal  
-  - `feature_engineering.py`: Date features, frequency encoding (zipcode), target encoding (city_full)
+Hệ thống gồm một **REST API** (FastAPI) phục vụ dự đoán thời gian thực/batch và một **Streamlit dashboard** để người dùng tương tác trực tiếp.
 
-- **`src/training_pipeline/`**: Model training and hyperparameter optimization
-  - `train.py`: Baseline XGBoost training with configurable parameters
-  - `tune.py`: Optuna-based hyperparameter tuning with MLflow integration
-  - `eval.py`: Model evaluation and metrics calculation
+---
 
-- **`src/inference_pipeline/`**: Production inference
-  - `inference.py`: Applies same preprocessing/encoding transformations using saved encoders
+## 🛠 Tech Stack
 
-- **`src/batch/`**: Batch prediction processing
-  - `run_monthly.py`: Generates monthly predictions on holdout data
+- **Machine Learning:** XGBoost, Scikit-learn, Optuna, MLflow, Pandas, NumPy
+- **Backend & UI:** FastAPI, Streamlit, Uvicorn
+- **Infrastructure (AWS):** S3, ECR, EKS (Kubernetes), VPC Endpoints (PrivateLink)
+- **DevOps & MLOps:** Terraform (IaC), Argo CD (GitOps), GitHub Actions, Docker, `uv`
+- **Security & Quality:** SonarQube, Trivy
 
-- **`src/api/`**: FastAPI web service
-  - `main.py`: REST API with S3 integration, health checks, prediction endpoints, and batch processing
+---
 
-### Web Applications
+## 📐 Kiến trúc hệ thống
 
-- **`app.py`**: Streamlit dashboard for interactive housing price predictions
-  - Real-time predictions via FastAPI integration
-  - Interactive filtering by year, month, and region
-  - Visualization of predictions vs actuals with metrics (MAE, RMSE, % Error)
-  - Yearly trend analysis with highlighted selected periods
+![MLOps Architecture](architectML.png)
 
-### Cloud Infrastructure & Deployment
+Dữ liệu chạy qua các bước theo thứ tự:
 
-- **AWS S3 Integration**: Data and model storage in `housing-regression-data` bucket
-- **Amazon ECR**: Container registry for Docker images
-- **Amazon ECS**: Container orchestration with Fargate
-- **Application Load Balancer**: Traffic distribution and routing
-- **CI/CD Pipeline**: Automated deployment via GitHub Actions
-
-#### ECS Services:
-- **housing-api-service**: FastAPI backend (port 8000, 1024 CPU, 3072 MB memory)
-- **housing-streamlit-service**: Streamlit dashboard (port 8501, 512 CPU, 1024 MB memory)
-
-### Data Leakage Prevention
-
-The project implements strict data leakage prevention:
-- Time-based splits (not random)
-- Encoders fitted only on training data
-- Leakage-prone columns dropped before training
-- Schema alignment enforced between train/eval/inference
-
-## Common Commands
-
-### Environment Setup
-```bash
-# Install dependencies using uv
-uv sync
+```
+Load → Preprocess → Feature Engineering → Train → Tune → Evaluate → Inference → Batch → Serve
 ```
 
-### Testing
+### 1. Core Modules
+
+**`src/feature_pipeline/`**
+- `load.py` — Chia dữ liệu theo thời gian: train (< 2020), eval (2020–21), holdout (≥ 2022)
+- `preprocess.py` — Chuẩn hóa tên thành phố, xóa trùng lặp, lọc ngoại lai
+- `feature_engineering.py` — Tạo feature thời gian, frequency encoding (zipcode), target encoding (city_full)
+
+**`src/training_pipeline/`**
+- `train.py` — Huấn luyện XGBoost baseline
+- `tune.py` — Tối ưu siêu tham số bằng Optuna, ghi log với MLflow
+- `eval.py` — Đánh giá mô hình và tính các metrics
+
+**`src/inference_pipeline/`**
+- `inference.py` — Chạy dự đoán bằng cách dùng lại các encoder và transform đã lưu từ lúc train
+
+**`src/batch/`**
+- `run_monthly.py` — Chạy dự đoán batch định kỳ trên tập holdout
+
+**`src/api/`**
+- `main.py` — FastAPI với các endpoint dự đoán, xử lý batch và kết nối S3
+
+### 2. Web App (`app.py`)
+
+Streamlit dashboard gọi API để lấy kết quả dự đoán thời gian thực. Hỗ trợ lọc theo năm, tháng, khu vực và hiển thị biểu đồ so sánh dự đoán vs thực tế.
+
+### 3. Hạ tầng Cloud & GitOps
+
+Mã nguồn ứng dụng và cấu hình triển khai được tách thành 2 repository riêng biệt theo chuẩn GitOps:
+
+👉 **GitOps Repository:** [Development-and-Deployment-of-a-Housing-Price-Prediction-System-using-MLOps-GitOps](https://github.com/khaipd18/Development-and-Deployment-of-a-Housing-Price-Prediction-System-using-MLOps-GitOps.git)
+
+| Thành phần | Vai trò |
+|------------|---------|
+| **AWS S3** | Lưu dữ liệu thô, dữ liệu đã xử lý, model và encoder (`housing-regression-data-mlops`) |
+| **Amazon ECR** | Lưu Docker images cho API và UI |
+| **Amazon EKS** | Cụm Kubernetes chạy các container backend và frontend |
+| **VPC Endpoints** | Cho phép EKS giao tiếp với S3, ECR, EC2, CloudWatch qua mạng nội bộ, không cần ra Internet |
+| **Terraform** | Quản lý toàn bộ hạ tầng bằng code (VPC, EKS, ECR, VPC Endpoints, IAM OIDC) |
+| **Argo CD** | Lắng nghe thay đổi từ GitOps repo và tự động sync trạng thái lên EKS |
+| **GitHub Actions** | Chạy các pipeline CI/CD và Continuous Training |
+
+---
+
+## 📊 Kết quả mô hình
+
+Mô hình XGBoost sau khi tune bằng Optuna, đánh giá trên tập Holdout (dữ liệu ≥ 2022):
+
+| Metric | Value |
+|--------|-------|
+| **MAE** | 32,900.98 |
+| **RMSE** | 74,151.63 |
+| **R² Score** | 0.9575 |
+
+Kết quả chi tiết từng lần chạy có thể xem tại giao diện MLflow (`http://localhost:5000`).
+
+---
+
+## Điểm nhấn thiết kế
+
+**Time-based Splitting** — Thay vì split ngẫu nhiên, dữ liệu được chia theo thời gian: train (< 2020), eval (2020–21), holdout (≥ 2022). Cách này mô phỏng đúng thực tế — dùng dữ liệu quá khứ để dự đoán tương lai — nên kết quả đánh giá đáng tin hơn nhiều so với random split.
+
+**Encoder Persistence** — Frequency encoder và target encoder chỉ được fit trên tập train, lưu thành file `.pkl` lên S3. Khi inference, hệ thống load lại đúng những file này. Cách này tránh data leakage và đảm bảo dữ liệu đầu vào lúc serving có cùng cấu trúc với lúc train.
+
+**Continuous Training tự động** — Workflow CT chạy theo lịch (cron job ngày 1 hàng tháng), tự kéo dữ liệu mới từ S3, chạy lại toàn bộ pipeline và cập nhật model mới nhất — không cần ai làm thủ công.
+
+**DevSecOps** — CI/CD tích hợp SonarQube để quét code tĩnh và Trivy để quét lỗ hổng CVE trong Docker image trước khi push lên ECR. Bảo mật được kiểm tra ngay trong pipeline, không phải sau khi deploy.
+
+**VPC Endpoints** — Worker node của EKS nằm trong private subnet, kết nối S3 và ECR qua VPC Endpoints nên không cần NAT Gateway hay đi ra Internet. Vừa tiết kiệm chi phí vừa thu hẹp bề mặt tấn công.
+
+**GitOps** — Toàn bộ trạng thái deploy được khai báo trong Git. Argo CD là thứ duy nhất được phép apply lên cluster, không có thao tác tay nào trực tiếp vào EKS.
+
+---
+
+## Chuẩn bị dữ liệu
+
+Trước khi chạy bất kỳ pipeline nào, cần tải dataset thô về trước:
+
+1. Vào Kaggle: [HouseTS Dataset](https://www.kaggle.com/datasets/shengkunwang/housets-dataset)
+2. Tải file về máy
+3. Đổi tên thành `untouched_raw_original.csv`
+4. Đặt vào: `data/raw/untouched_raw_original.csv`
+
+---
+
+## Chạy trên Local
+
+### Cài đặt môi trường
+
 ```bash
-# Run all tests
-pytest
-
-# Run specific test modules  
-pytest tests/test_features.py
-pytest tests/test_training.py
-pytest tests/test_inference.py
-
-# Run with verbose output
-pytest -v
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
 ```
 
-### Data Pipeline
+### Chạy các pipeline
+
 ```bash
-# 1. Load and split raw data
+# 1. Xử lý dữ liệu
 python src/feature_pipeline/load.py
-
-# 2. Preprocess splits
 python -m src.feature_pipeline.preprocess
-
-# 3. Feature engineering
 python -m src.feature_pipeline.feature_engineering
-```
 
-### Training Pipeline
-```bash
-# Train baseline model
+# 2. Huấn luyện & đánh giá
 python src/training_pipeline/train.py
-
-# Hyperparameter tuning with MLflow
 python src/training_pipeline/tune.py
-
-# Model evaluation
 python src/training_pipeline/eval.py
+
+# 3. Khởi động services
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000       # API
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0  # UI
 ```
 
-### Inference
+### MLflow UI
+
 ```bash
-# Single inference
-python src/inference_pipeline/inference.py --input data/raw/holdout.csv --output predictions.csv
-
-# Batch monthly predictions
-python src/batch/run_monthly.py
-```
-
-### API Service
-```bash
-# Start FastAPI server locally
-uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-```
-
-### Streamlit Dashboard
-```bash
-# Start Streamlit dashboard locally
-streamlit run app.py --server.port 8501 --server.address 0.0.0.0
-```
-
-### Docker
-```bash
-# Build API container
-docker build -t housing-regression .
-
-# Build Streamlit container  
-docker build -t housing-streamlit -f Dockerfile.streamlit .
-
-# Run API container
-docker run -p 8000:8000 housing-regression
-
-# Run Streamlit container
-docker run -p 8501:8501 housing-streamlit
-```
-
-### MLflow Tracking
-```bash
-# Start MLflow UI (view experiments)
 mlflow ui
 ```
 
-## Key Design Patterns
+Truy cập `http://localhost:5000` để xem lịch sử các lần chạy và biểu đồ tuning của Optuna.
 
-### Pipeline Modularity
-Each pipeline component can be run independently with consistent interfaces. All modules accept configurable input/output paths for testing isolation.
+---
 
-### Cloud-Native Architecture
-- **S3-First Storage**: Models and data automatically sync from S3 buckets
-- **Containerized Services**: Both API and dashboard run in Docker containers  
-- **Auto-scaling Infrastructure**: ECS Fargate provides serverless container scaling
-- **Environment-based Configuration**: Separate configs for local development and production
+## 🔌 API Documentation
 
-### Encoder Persistence  
-Frequency and target encoders are saved as pickle files during training and loaded during inference to ensure consistent transformations.
+Sau khi API chạy, vào `http://localhost:8000/docs` để xem Swagger UI.
 
-### Configuration Management
-Model parameters, file paths, and pipeline settings use sensible defaults but can be overridden through function parameters or environment variables. Production deployments use AWS environment variables.
+Ví dụ gọi API dự đoán:
 
-### Testing Strategy
-- Unit tests for individual pipeline components
-- Integration tests for end-to-end pipeline flows  
-- Smoke tests for inference pipeline
-- All tests use temporary directories to avoid touching production data
+```bash
+curl -X POST 'http://localhost:8000/predict' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "zipcode": 98101,
+    "bedrooms": 3,
+    "bathrooms": 2.0,
+    "sqft_living": 1500
+  }'
+```
 
-## Dependencies
+---
 
-Key production dependencies (see `pyproject.toml`):
-- **ML/Data**: `xgboost==3.0.4`, `scikit-learn`, `pandas==2.1.1`, `numpy==1.26.4`
-- **API**: `fastapi`, `uvicorn`
-- **Dashboard**: `streamlit`, `plotly`
-- **Cloud**: `boto3` (AWS integration)
-- **Experimentation**: `mlflow`, `optuna`
-- **Quality**: `great-expectations`, `evidently`
+## Tự động hóa trên Cloud
 
-## File Structure Notes
+### Bước 1 — Triển khai hạ tầng (Terraform)
 
-- **`data/`**: Raw, processed, and prediction data (time-structured, S3-synced)
-- **`models/`**: Trained models and encoders (pkl files, S3-synced)
-- **`mlruns/`**: MLflow experiment tracking data
-- **`configs/`**: YAML configuration files
-- **`notebooks/`**: Jupyter notebooks for EDA and experimentation
-- **`tests/`**: Comprehensive test suite with sample data
-- **AWS Task Definitions**: `housing-api-task-def.json`, `streamlit-task-def.json`
-- **CI/CD**: `.github/workflows/ci.yml` for automated deployment
+Có thể trigger tự động qua GitHub Actions (`infra.yml`), hoặc chạy thủ công:
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply -auto-approve
+```
+
+### Bước 2 — Upload dữ liệu lên S3
+
+```bash
+aws s3 cp data/raw/untouched_raw_original.csv s3://housing-regression-data-mlops/raw/untouched_raw_original.csv
+```
+
+### Bước 3 — Continuous Training (CT)
+
+Workflow `ct.yaml` — chạy thủ công qua `workflow_dispatch` hoặc tự động vào ngày 1 hàng tháng.
+
+Pipeline sẽ:
+1. Pull dữ liệu từ S3
+2. Chạy toàn bộ data pipeline
+3. Train, tune (Optuna) và evaluate, ghi log bằng MLflow
+4. Đẩy model, encoder, dữ liệu đã xử lý ngược lên S3
+
+### Bước 4 — CI/CD
+
+Workflow `ci.yml` — tự động chạy khi có push hoặc merge vào nhánh `main`.
+
+Pipeline sẽ:
+1. Kiểm tra code với SonarQube và chạy unit test (Pytest)
+2. Build 2 Docker images: `housing-api` và `housing-ui`
+3. Quét lỗ hổng bảo mật bằng Trivy
+4. Push images lên Amazon ECR
+5. Dùng `yq` để tự động cập nhật image tag (`github.sha`) vào `values-dev.yaml` trong GitOps repo
+
+### Bước 5 — GitOps (Argo CD)
+
+Sau khi CI/CD cập nhật tag mới vào GitOps repo, Argo CD phát hiện thay đổi và tự động deploy phiên bản mới lên EKS theo chiến lược Rolling Update — không gây downtime.
+
+> Hướng dẫn cài đặt và cấu hình Argo CD trên EKS xem tại [GitOps Repository](https://github.com/khaipd18/Development-and-Deployment-of-a-Housing-Price-Prediction-System-using-MLOps-GitOps.git).
+
+---
+
+## 📁 Cấu trúc thư mục
+
+```
+├── .github/workflows/
+│   ├── ci.yml                 # CI/CD: test, build, push ECR, cập nhật GitOps
+│   ├── ct.yaml                # Continuous Training: chạy định kỳ hàng tháng
+│   └── infra.yml              # Terraform: kiểm tra và apply hạ tầng
+├── configs/                   # File cấu hình tham số hệ thống và mô hình
+├── data/
+│   ├── raw/                   # Dữ liệu thô (untouched_raw_original.csv)
+│   ├── processed/             # Dữ liệu sau feature engineering
+│   └── predictions/           # Kết quả dự đoán batch
+├── models/                    # File model (.pkl) và encoder đã train
+├── notebooks/                 # Jupyter Notebooks cho EDA và thử nghiệm
+├── src/
+│   ├── api/                   # FastAPI backend
+│   ├── batch/                 # Script dự đoán batch hàng tháng
+│   ├── feature_pipeline/      # Load, preprocess, feature engineering
+│   ├── training_pipeline/     # Train, tune, evaluate
+│   └── inference_pipeline/    # Inference cho production
+├── terraform/
+│   ├── modules/
+│   │   ├── vpc-endpoints/     # Cấu hình AWS PrivateLink
+│   │   ├── eks/               # Cụm EKS và worker nodes
+│   │   ├── ecr/               # Docker image registry
+│   │   └── github-oidc-role/  # IAM role cho GitHub Actions
+│   ├── main.tf
+│   └── backend.tf             # Remote state (S3)
+├── tests/                     # Unit tests và dummy data
+├── app.py                     # Streamlit UI
+├── Dockerfile                 # Image cho FastAPI
+├── Dockerfile.streamlit       # Image cho Streamlit
+├── pyproject.toml / uv.lock
+└── requirements.txt
+```
