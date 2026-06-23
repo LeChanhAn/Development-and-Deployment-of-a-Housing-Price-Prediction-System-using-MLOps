@@ -64,6 +64,11 @@ resource "aws_iam_role_policy_attachment" "node_group_AmazonSSMManagedInstanceCo
   role       = aws_iam_role.node_group.name
 }
 
+# S3 read-only access for worker nodes (if needed)
+resource "aws_iam_role_policy_attachment" "eks_node_s3_read" {
+  role       = aws_iam_role.node_group.name 
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+}
 # 3. OIDC PROVIDER (IDENTITY FEDERATION)
 
 # Retrieve the EKS cluster's TLS certificate to establish trust
