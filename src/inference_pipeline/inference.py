@@ -50,6 +50,7 @@ def predict(
     model_path: Path | str = DEFAULT_MODEL,
     freq_encoder_path: Path | str = DEFAULT_FREQ_ENCODER,
     target_encoder_path: Path | str = DEFAULT_TARGET_ENCODER,
+    expected_columns: list | None = None,
 ) -> pd.DataFrame:
     global TRAIN_FEATURE_COLUMNS
     
@@ -85,13 +86,16 @@ def predict(
         df = df.drop(columns=["price"])
 
     # Step 5: Align columns with training schema
-    if TRAIN_FEATURE_COLUMNS is None and Path(TRAIN_FE_PATH).exists():
-        _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
-        TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]
+    if expected_columns is not None:
+        # Nếu được truyền từ API, ưu tiên dùng
+        df = df.reindex(columns=expected_columns, fill_value=0)
+    else:
+        if TRAIN_FEATURE_COLUMNS is None and Path(TRAIN_FE_PATH).exists():
+            _train_cols = pd.read_csv(TRAIN_FE_PATH, nrows=1)
+            TRAIN_FEATURE_COLUMNS = [c for c in _train_cols.columns if c != "price"]
 
-    # Sau khi cập nhật xong mới tiến hành reindex
-    if TRAIN_FEATURE_COLUMNS is not None:
-        df = df.reindex(columns=TRAIN_FEATURE_COLUMNS, fill_value=0)
+        if TRAIN_FEATURE_COLUMNS is not None:
+            df = df.reindex(columns=TRAIN_FEATURE_COLUMNS, fill_value=0)
 
     # Step 6: Load model & predict
     model = load(model_path)

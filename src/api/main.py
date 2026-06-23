@@ -102,7 +102,7 @@ def predict_batch(data: List[dict]):
     if df.empty:
         return {"error": "No data provided"}
 
-    preds_df = predict(df, model_path=MODEL_PATH)
+    preds_df = predict(df, model_path=MODEL_PATH, expected_columns=TRAIN_FEATURE_COLUMNS)
 
     resp = {"predictions": preds_df["predicted_price"].astype(float).tolist()}
     if "actual_price" in preds_df.columns:
