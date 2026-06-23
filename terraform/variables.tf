@@ -106,9 +106,9 @@ variable "eks_node_group_scaling_config" {
     min_size     = number
   })
   default = {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
+    desired_size = 3
+    max_size     = 4
+    min_size     = 2
   }
 }
 
