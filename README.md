@@ -262,3 +262,31 @@ Once CI/CD commits the new tag to the GitOps repo, Argo CD detects the change an
 ├── pyproject.toml / uv.lock
 └── requirements.txt
 ```
+---
+
+## 🧹 Teardown
+
+> **Read this before running `terraform destroy`**
+
+The ALBs in this project are not managed by Terraform — they are created automatically by the AWS Load Balancer Controller when Kubernetes applies `ingress.yaml` in GitOps Repo. This means Terraform has no knowledge of them and will not delete them on its own.
+
+If you run `terraform destroy` immediately, these ALBs will still hold ENIs inside the Subnet, causing VPC deletion to fail.
+
+**Correct teardown order:**
+
+**1. Delete the Ingress resources so Kubernetes reclaims the ALBs:**
+
+```bash
+kubectl delete ingress housing-ingress -n housing-dev
+kubectl delete ingress housing-ingress -n housing-prod
+```
+
+**2. Wait for the ALBs to be fully removed:**
+
+Go to AWS Console → EC2 → Load Balancers and wait 2–3 minutes until they disappear.
+
+**3. Run terraform destroy:**
+
+```bash
+terraform destroy
+```
