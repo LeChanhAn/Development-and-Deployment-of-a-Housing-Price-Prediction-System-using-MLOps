@@ -30,7 +30,7 @@ The system provides a **REST API** (FastAPI) for real-time and batch predictions
 
 ## 📐 System Architecture
 
-![MLOps Architecture](architectML.png)
+![MLOps Architecture](architechML.png)
 
 Data flows through the pipeline in the following order:
 

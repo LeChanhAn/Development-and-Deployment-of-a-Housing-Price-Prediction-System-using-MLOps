@@ -30,7 +30,7 @@ Hệ thống gồm một **REST API** (FastAPI) phục vụ dự đoán thời g
 
 ## 📐 Kiến trúc hệ thống
 
-![MLOps Architecture](architectML.png)
+![MLOps Architecture](architechML.png)
 
 Dữ liệu chạy qua các bước theo thứ tự:
 
