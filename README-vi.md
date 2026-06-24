@@ -265,7 +265,7 @@ Sau khi CI/CD cập nhật tag mới vào GitOps repo, Argo CD phát hiện thay
 
 ---
 
-## 🧹 5. Teardown — Dọn dẹp hệ thống
+## 🧹 Teardown — Dọn dẹp hệ thống
 
 Khi muốn dọn dẹp hệ thống để tiết kiệm chi phí, **bạn bắt buộc phải xóa toàn bộ tài nguyên ứng dụng trên Kubernetes (đặc biệt là Ingress) trước khi chạy `terraform destroy` bên repo hạ tầng.**
 
